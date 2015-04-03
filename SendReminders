@@ -1,0 +1,98 @@
+/**
+ * Sends a reminder based on the date in the third column.
+ */
+
+// What address should be BCC'd on all of the reminder emails?
+var bccAddress = 'example@example.org';
+
+// How many days before reminder is sent out
+var remindDaysBefore = 2;
+
+// Settings and constants - probably do not need to change these
+var EmailSubjectCell = "C2";
+var EmailMessageCell = "C3";
+var HeaderRowEnd = 4;
+var ReminderSentColumn = 5;
+var PreferredDateFormat = "EEEEEEE MMM dd";
+
+// Global Variables
+var timeZone;
+
+// Main function set in motion by hourly trigger
+// Add any sheets that you want to have reminders -- make sure to follow the exact same format!
+function sendReminders() {
+  var thisSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  timeZone = thisSpreadsheet.getSpreadsheetTimeZone();
+   
+ // var testReminderSheet = thisSpreadsheet.getSheetByName("testSheet");
+ // sendRemindersForSheet(testReminderSheet);
+ 
+  var elHayedoSheet = thisSpreadsheet.getSheetByName("El Hayedo");
+  sendRemindersForSheet(elHayedoSheet);
+  
+  var elPinarSheet = thisSpreadsheet.getSheetByName("El Pinar");
+  sendRemindersForSheet(elPinarSheet);
+  
+  var laAlamedaA = thisSpreadsheet.getSheetByName("La Alameda - Group A");
+  sendRemindersForSheet(laAlamedaA);
+  
+  var laAlamedaB = thisSpreadsheet.getSheetByName("La Alameda - Group B");
+  sendRemindersForSheet(laAlamedaB); 
+}
+
+function sendRemindersForSheet(sheet) { 
+  // Get Subject
+  var range = sheet.getRange(EmailSubjectCell);
+  var emailSubject = range.getValues();
+  
+  // Get Email Message
+  range = sheet.getRange(EmailMessageCell);
+  var emailMessage = range.getValues();
+  
+  // Get list of Email Addresses
+  // HeaderRowEnd is the end of the header on the spreadsheet.
+  // The one says to ignore the last column of data (because it is blank)
+  // range.GetNumRows gets all of the data but now the range is less because we are ignoring the start rows
+  range = sheet.getDataRange();
+  range = range.offset(HeaderRowEnd, 1, range.getNumRows()-HeaderRowEnd);
+
+  
+  //Loop through the lines for each recipient and send the message
+  range.getValues().forEach( function( recipient, index, data ) {
+    var studentName = recipient[0];
+    var parentEmail = recipient[1];
+    var eventDate = recipient[2];
+    var reminderSent = recipient [3];
+    var todaysDate = new Date();
+    var textEventDate = Utilities.formatDate(eventDate, timeZone,PreferredDateFormat);
+    
+    Logger.log(textEventDate);
+    
+    // substitute the child and the date in the form email and subject
+    var emailMessageMerged = emailMessage.toString().replace("[CHILD]", studentName);
+    var emailSubjectMerged = emailSubject.toString().replace("[CHILD]", studentName);
+    emailMessageMerged = emailMessageMerged.toString().replace("[DATE]", textEventDate);
+    emailSubjectMerged = emailSubjectMerged.toString().replace("[DATE]", textEventDate);  
+    
+    // milliseconds between two dates divided by milliseconds in a day, rounded down
+    var daysUntilEvent = Math.floor((eventDate.getTime() - todaysDate.getTime()) / (1000 * 60 * 60 * 24));     
+        
+    Logger.log(daysUntilEvent);
+    
+    if (daysUntilEvent >= 0 && daysUntilEvent <= remindDaysBefore && reminderSent == "") {
+    
+    Logger.log("sending...");
+      
+      MailApp.sendEmail(parentEmail, emailSubjectMerged, emailMessageMerged, {
+        bcc:      bccAddress,
+        noReply:   true 
+      });
+      
+      sheet.getRange(HeaderRowEnd+1 + index, ReminderSentColumn).setValue(todaysDate); 
+      
+     // Make sure the cell is updated right away in case the script is interrupted
+     SpreadsheetApp.flush();
+      
+    }
+  })
+}
